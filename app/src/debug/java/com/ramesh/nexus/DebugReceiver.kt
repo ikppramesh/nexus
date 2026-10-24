@@ -10,6 +10,7 @@ import kotlin.concurrent.thread
  * Debug builds only. Ask Nexus something without the mic, and hear the answer:
  *   adb shell am broadcast -n com.ramesh.nexus/.DebugReceiver --es ask "What's a good name for a cat?"
  *   adb shell am broadcast -n com.ramesh.nexus/.DebugReceiver --es polish "um so like send it at 5 no wait 6"
+ *   adb shell am broadcast -n com.ramesh.nexus/.DebugReceiver --es fast "Hi, this is my conversation voice."
  */
 class DebugReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -25,6 +26,20 @@ class DebugReceiver : BroadcastReceiver() {
                     ReadService.read(context, a)
                 }
                 if (intent.hasExtra("benchtts")) benchTts(context, intent)
+                intent.getStringExtra("fast")?.let { text ->
+                    // The conversation voice: --es fast "Hello there"
+                    val t0 = System.currentTimeMillis()
+                    var first = -1L
+                    val sp = Speaker()
+                    Engines.synthesizeFast(text) {
+                        if (first < 0) first = System.currentTimeMillis() - t0
+                        sp.play(it) { false }
+                        true
+                    }
+                    Log.i(TAG, "fast voice: first audio ${first} ms, generated in ${System.currentTimeMillis() - t0} ms")
+                    sp.drain { false }
+                    sp.release()
+                }
                 intent.getStringExtra("polish")?.let { raw ->
                     Log.i(TAG, "RAW: $raw\nPOLISHED: ${brain.polish(raw, "com.whatsapp")}")
                 }

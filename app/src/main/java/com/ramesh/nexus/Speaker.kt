@@ -44,6 +44,14 @@ class Speaker(usage: Int = AudioAttributes.USAGE_MEDIA, speed: Float = 1f) {
         }
     }
 
+    /** Speaks [text] in the fast conversational voice, playing audio as it's generated. */
+    fun speakFast(text: String, cancelled: () -> Boolean) {
+        Engines.synthesizeFast(text) { audio ->
+            play(audio, cancelled)
+            !cancelled()
+        }
+    }
+
     /** Queues already-generated audio. */
     fun play(audio: FloatArray, cancelled: () -> Boolean) {
         if (cancelled()) return

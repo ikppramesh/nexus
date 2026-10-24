@@ -347,7 +347,9 @@ private fun SetupScreen(prefs: Prefs) {
             }) { Text("Allow microphone") }
         }
 
-        val brainReady = if (engine == Prefs.ENGINE_LOCAL) remember(refresh) { LocalLlm.ready() } else key.isNotBlank()
+        val download by ModelDownloadService.progress.collectAsState()
+        val brainReady = if (engine == Prefs.ENGINE_LOCAL) remember(refresh, download?.finished) { LocalLlm.ready() }
+        else key.isNotBlank()
         Step("AI brain", brainReady) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
@@ -361,11 +363,13 @@ private fun SetupScreen(prefs: Prefs) {
                     label = { Text("Claude · online") },
                 )
             }
-            if (engine == Prefs.ENGINE_LOCAL) Text(
-                if (brainReady) "Your IRx-mini model answers fully offline. Nothing leaves the phone."
-                else "IRx-mini isn't on the phone yet. Run scripts/setup.sh on the Mac.",
-                color = Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp),
-            )
+            if (engine == Prefs.ENGINE_LOCAL) {
+                Text(
+                    "Runs fully offline. Nothing you say leaves the phone.",
+                    color = Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp),
+                )
+                ModelPicker()
+            }
         }
 
         if (engine == Prefs.ENGINE_CLAUDE) Step("Claude API key", key.isNotBlank()) {

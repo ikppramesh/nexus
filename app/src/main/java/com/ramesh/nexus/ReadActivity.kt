@@ -9,6 +9,11 @@ import android.widget.Toast
 class ReadActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Recreated (fold/rotate) before finishing: the text was already sent.
+        if (savedInstanceState != null) {
+            finish()
+            return
+        }
         val text = (intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)
             ?: intent.getCharSequenceExtra(Intent.EXTRA_TEXT))?.toString()
         when {

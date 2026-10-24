@@ -3,7 +3,10 @@ package com.ramesh.nexus
 import android.util.Log
 import java.io.File
 
-/** Ramesh's IRx-mini model (Gemma 3 1B fine-tune, GGUF) running on the phone through llama.cpp. */
+/**
+ * The on-device AI: a GGUF model running through llama.cpp. Ramesh's IRx-mini by default, or any
+ * model he downloads from Hugging Face in Setup (see ModelStore).
+ */
 object LocalLlm {
     private const val TAG = "NexusLlm"
     const val MODEL_FILE = "irx-mini-Q8_0.gguf"
@@ -13,10 +16,12 @@ object LocalLlm {
         System.loadLibrary("nexus_llm")
     }
 
-    private val modelFile: File get() = File(Engines.modelsDir, MODEL_FILE)
     private var session = 0L
+    private var loadedPath: String? = null
 
-    fun ready() = modelFile.exists()
+    private fun modelFile(): File? = ModelStore(Engines.context).selected()
+
+    fun ready() = modelFile() != null
 
     /** Native code calls this with raw UTF-8 bytes of each token. */
     private interface PieceSink {
@@ -35,15 +40,21 @@ object LocalLlm {
         cancelled: () -> Boolean,
         onText: (String) -> Unit,
     ): String {
+        val file = checkNotNull(modelFile()) { "No AI model on the phone yet. Download one in Setup." }
+        if (session != 0L && loadedPath != file.path) {
+            nativeFree(session) // Ramesh picked a different model
+            session = 0L
+        }
         if (session == 0L) {
-            check(ready()) { "IRx-mini isn't on the phone yet. Run scripts/setup.sh on the Mac." }
             val t0 = System.currentTimeMillis()
-            session = nativeLoad(modelFile.path, 4, CONTEXT)
-            check(session != 0L) { "Couldn't load IRx-mini." }
-            Log.i(TAG, "loaded in ${System.currentTimeMillis() - t0} ms")
+            session = nativeLoad(file.path, 4, CONTEXT)
+            check(session != 0L) { "Couldn't load ${file.name}." }
+            loadedPath = file.path
+            Log.i(TAG, "loaded ${file.name} in ${System.currentTimeMillis() - t0} ms")
         }
         val out = StringBuilder()
         val utf8 = Utf8Assembler()
+        val visible = ThinkFilter()
         val t0 = System.currentTimeMillis()
         val n = nativeGenerate(
             session,
@@ -54,7 +65,7 @@ object LocalLlm {
             object : PieceSink {
                 override fun onPiece(bytes: ByteArray): Boolean {
                     if (cancelled()) return false
-                    val text = utf8.add(bytes)
+                    val text = visible.add(utf8.add(bytes))
                     if (text.isNotEmpty()) {
                         out.append(text)
                         onText(text)
@@ -63,10 +74,39 @@ object LocalLlm {
                 }
             },
         )
-        check(n >= 0) { "IRx-mini couldn't answer (the conversation may be too long; start a new chat)." }
+        check(n >= 0) { "The AI couldn't answer (the conversation may be too long; start a new chat)." }
         val secs = (System.currentTimeMillis() - t0) / 1000f
         Log.d(TAG, "generated $n tokens in %.1fs (%.1f tok/s)".format(secs, n / secs))
         return out.toString()
+    }
+
+    /**
+     * Drops "<think>…</think>" reasoning that some models (e.g. Qwen-based ones) write even with
+     * thinking switched off, so it's never shown or spoken.
+     */
+    private class ThinkFilter {
+        private val pending = StringBuilder()
+        private var thinking = false
+
+        fun add(text: String): String {
+            pending.append(text)
+            val out = StringBuilder()
+            while (true) {
+                val tag = if (thinking) "</think>" else "<think>"
+                val i = pending.indexOf(tag)
+                if (i >= 0) {
+                    if (!thinking) out.append(pending, 0, i)
+                    pending.delete(0, i + tag.length)
+                    thinking = !thinking
+                    continue
+                }
+                // Hold back a tail that could be the start of a tag split across tokens.
+                val keep = (1 until tag.length).lastOrNull { pending.endsWith(tag.substring(0, it)) } ?: 0
+                if (!thinking) out.append(pending, 0, pending.length - keep)
+                pending.delete(0, pending.length - keep)
+                return out.toString()
+            }
+        }
     }
 
     /** Joins token bytes into text without splitting multi-byte characters such as emoji. */

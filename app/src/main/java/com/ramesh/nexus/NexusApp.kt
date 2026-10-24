@@ -7,7 +7,7 @@ class NexusApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Engines.init(this)
-        thread(name = "nexus-preload", priority = Thread.MIN_PRIORITY) {
+        thread(name = "nexus-preload") {
             runCatching { Engines.preload() }
         }
     }

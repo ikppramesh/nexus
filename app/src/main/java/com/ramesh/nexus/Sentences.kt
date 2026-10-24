@@ -17,10 +17,12 @@ object Sentences {
 
     private val listMarker = Regex("""(?m)^\s*(?:[-*•–—]+|\d+[.)]|#+)\s*""")
     private val link = Regex("""\[([^\]]+)]\([^)]*\)""")
+    private val emoji = Regex("[\\p{So}\\p{Cs}\\uFE0F\\u200D]")
 
-    /** Strips markdown that would be read out literally (bullets, numbering, bold, links). */
+    /** Strips markdown and emoji that would be read out literally (bullets, numbering, bold, links). */
     private fun forSpeech(text: String): String = text
         .replace(link, "$1")
+        .replace(emoji, "")
         .replace(listMarker, "")
         .replace("**", "").replace("__", "").replace("`", "")
 

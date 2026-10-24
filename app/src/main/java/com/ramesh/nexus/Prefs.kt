@@ -11,6 +11,11 @@ class Prefs(context: Context) {
         get() = sp.getString("engine", ENGINE_LOCAL)!!
         set(v) = sp.edit { putString("engine", v) }
 
+    /** Path of the GGUF model the on-device brain uses (see ModelStore). */
+    var localModel: String
+        get() = sp.getString("local_model", "")!!
+        set(v) = sp.edit { putString("local_model", v) }
+
     var apiKey: String
         get() = sp.getString("api_key", "")!!
         set(v) = sp.edit { putString("api_key", v.trim()) }

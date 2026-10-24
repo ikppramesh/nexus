@@ -24,8 +24,8 @@ import java.nio.LongBuffer
 class ChatterboxTts(dir: File, voice: InputStream, private val tuning: Tuning = Tuning()) {
     /** Session settings, measured on the Fold7 (see DebugReceiver "benchtts"). */
     data class Tuning(
-        val lmThreads: Int = 4,
-        val decoderThreads: Int = 4,
+        val lmThreads: Int = 2,
+        val decoderThreads: Int = 6,
         val decoderFile: String = "conditional_decoder_q4.onnx",
         val decoderXnnpack: Boolean = false,
     )

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include "llama.h"
+#include "chat.h"
 
 #define LOG_TAG "NexusLlm"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -17,7 +18,8 @@ struct Session {
     llama_context *ctx = nullptr;
     const llama_vocab *vocab = nullptr;
     std::string tmpl;
-    std::vector<llama_token> cached;  // tokens currently in the KV cache
+    common_chat_templates_ptr templates;  // the model's own Jinja template
+    std::vector<llama_token> cached;      // tokens currently in the KV cache
 };
 
 llama_sampler *make_sampler(const llama_vocab *vocab, float temp) {
@@ -37,6 +39,44 @@ std::string jstr(JNIEnv *env, jstring s) {
     std::string out(c);
     env->ReleaseStringUTFChars(s, c);
     return out;
+}
+
+// The model's own Jinja template, with thinking switched off (a spoken reply can't wait for it).
+// Empty if the model has no usable template.
+std::string format_jinja(Session *s, const std::vector<std::string> &roles, const std::vector<std::string> &contents) {
+    if (!s->templates) return "";
+    try {
+        common_chat_templates_inputs in;
+        for (size_t i = 0; i < roles.size(); i++) {
+            common_chat_msg m;
+            m.role = roles[i];
+            m.content = contents[i];
+            in.messages.push_back(m);
+        }
+        in.add_generation_prompt = true;
+        in.use_jinja = true;
+        in.enable_thinking = false;
+        return common_chat_templates_apply(s->templates.get(), in).prompt;
+    } catch (const std::exception &e) {
+        LOGE("jinja template failed: %s", e.what());
+        return "";
+    }
+}
+
+// llama.cpp's built-in formats: the model's family if recognised, else ChatML.
+std::string format_builtin(Session *s, const std::vector<llama_chat_message> &msgs) {
+    std::vector<char> buf(8192);
+    const char *tmpl = s->tmpl.c_str();
+    int len = llama_chat_apply_template(tmpl, msgs.data(), msgs.size(), true, buf.data(), buf.size());
+    if (len < 0) {
+        tmpl = "chatml";
+        len = llama_chat_apply_template(tmpl, msgs.data(), msgs.size(), true, buf.data(), buf.size());
+    }
+    if (len > (int) buf.size()) {
+        buf.resize(len);
+        len = llama_chat_apply_template(tmpl, msgs.data(), msgs.size(), true, buf.data(), buf.size());
+    }
+    return len < 0 ? "" : std::string(buf.data(), len);
 }
 
 }  // namespace
@@ -68,6 +108,11 @@ Java_com_ramesh_nexus_LocalLlm_nativeLoad(JNIEnv *env, jobject, jstring path, ji
     s->vocab = llama_model_get_vocab(model);
     const char *t = llama_model_chat_template(model, nullptr);
     s->tmpl = t ? t : "";
+    try {
+        s->templates = common_chat_templates_init(model, "");
+    } catch (const std::exception &e) {
+        LOGE("chat template not usable (%s); using built-in formats", e.what());
+    }
     LOGI("model loaded, ctx=%d threads=%d", n_ctx, threads);
     return reinterpret_cast<jlong>(s);
 }
@@ -98,22 +143,19 @@ Java_com_ramesh_nexus_LocalLlm_nativeGenerate(JNIEnv *env, jobject, jlong ptr, j
         c[i] = jstr(env, (jstring) env->GetObjectArrayElement(contents, i));
         msgs[i] = {r[i].c_str(), c[i].c_str()};
     }
-    std::vector<char> buf(8192);
-    int len = llama_chat_apply_template(s->tmpl.c_str(), msgs.data(), n, true, buf.data(), buf.size());
-    if (len > (int) buf.size()) {
-        buf.resize(len);
-        len = llama_chat_apply_template(s->tmpl.c_str(), msgs.data(), n, true, buf.data(), buf.size());
-    }
-    if (len < 0) {
+    std::string prompt = format_jinja(s, r, c);
+    if (prompt.empty()) prompt = format_builtin(s, msgs);
+    if (prompt.empty()) {
         LOGE("chat template failed");
         return -1;
     }
-    std::string prompt(buf.data(), len);
 
-    // The template already starts with <bos>, so don't add another.
-    int n_tok = -llama_tokenize(s->vocab, prompt.c_str(), prompt.size(), nullptr, 0, false, true);
+    // Add <bos> only if the model wants one and the template didn't already write it.
+    const char *bos = llama_vocab_get_text(s->vocab, llama_vocab_bos(s->vocab));
+    const bool add_bos = llama_vocab_get_add_bos(s->vocab) && !(bos && prompt.rfind(bos, 0) == 0);
+    int n_tok = -llama_tokenize(s->vocab, prompt.c_str(), prompt.size(), nullptr, 0, add_bos, true);
     std::vector<llama_token> tokens(n_tok);
-    llama_tokenize(s->vocab, prompt.c_str(), prompt.size(), tokens.data(), n_tok, false, true);
+    llama_tokenize(s->vocab, prompt.c_str(), prompt.size(), tokens.data(), n_tok, add_bos, true);
 
     const int n_ctx = (int) llama_n_ctx(s->ctx);
     if (n_tok + max_tokens > n_ctx) {

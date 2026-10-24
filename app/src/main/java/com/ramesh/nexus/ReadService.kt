@@ -30,6 +30,8 @@ class ReadService : Service() {
         }
         startForeground(1, notification(text), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
 
+        // The same text again (e.g. a double tap) keeps the current reading going.
+        job?.let { if (!it.cancelled && it.text == text) return START_NOT_STICKY }
         job?.cancelled = true
         val j = Job(text)
         job = j

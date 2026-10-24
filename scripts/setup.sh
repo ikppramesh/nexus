@@ -34,6 +34,8 @@ download() {
   for f in $CB_FILES; do
     [[ -f models/chatterbox-turbo/$f ]] || fetch $CB/$f models/chatterbox-turbo/${f:h}
   done
+  [[ -d models/sherpa-onnx-pocket-tts-int8-2026-01-26 ]] ||
+    fetch $REL/tts-models/sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2 models
   [[ -d models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8 ]] ||
     fetch $REL/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2 models
   [[ -f models/silero_vad_v5.onnx ]] || fetch $REL/asr-models/silero_vad_v5.onnx models
@@ -52,8 +54,10 @@ device() {
 }
 
 voice() {
-  # Turns a recording of your voice into app/src/main/assets/voice/voice.cond (personal: not in git).
-  # Default: 10 s from 2 s into your original recording, the stretch that matched your voice best.
+  # Turns a recording of your voice into the app's two voices (personal: not in git):
+  #   voice.cond            realistic voice (Chatterbox), from 10 s of speech
+  #   pocket_reference.wav  fast voice (Pocket TTS), from 20 s of speech
+  # Default: starting 2 s into your original recording, the stretch that matched your voice best.
   local src=${1:-} start=${2:-2}
   if [[ -z $src ]]; then
     for c in voices/Ramesh/samples/*.wav reference.wav; do [[ -f $c ]] && src=$c && break; done
@@ -62,15 +66,18 @@ voice() {
   download
   [[ -x .venv/bin/python ]] || { uv venv -q .venv && uv pip install -q --python .venv/bin/python onnxruntime soundfile numpy; }
   .venv/bin/python tools/make_voice.py "$src" --start $start --seconds 10
+  ffmpeg -loglevel error -y -ss $start -t 20 -i "$src" -ac 1 -ar 24000 -af "highpass=f=70,loudnorm" \
+    -c:a pcm_s16le app/src/main/assets/voice/pocket_reference.wav
+  echo "🎙  voice made from $src"
 }
 
 push_models() {
   adb shell mkdir -p $REMOTE/models
   # Skip files already on the phone with the same size.
-  adb shell rm -rf $REMOTE/models/pocket   # replaced by Chatterbox
   mkdir -p models/.phone-chatterbox
   for f in $CB_FILES; do [[ $f == *speech_encoder* ]] || ln -sf ../chatterbox-turbo/$f models/.phone-chatterbox/${f:t}; done
   for pair in "models/.phone-chatterbox:chatterbox" \
+              "models/sherpa-onnx-pocket-tts-int8-2026-01-26:pocket" \
               "models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8:parakeet"; do
     local src=${pair%%:*} dst=$REMOTE/models/${pair##*:}
     adb shell mkdir -p $dst
@@ -93,7 +100,7 @@ push_models() {
 case ${1:-} in
   --models) device; download; push_models; exit ;;
   --voice) voice "$2" "${3:-0}" ;;
-  *) [[ -f app/src/main/assets/voice/voice.cond ]] || voice ;;
+  *) [[ -f app/src/main/assets/voice/voice.cond && -f app/src/main/assets/voice/pocket_reference.wav ]] || voice ;;
 esac
 
 download

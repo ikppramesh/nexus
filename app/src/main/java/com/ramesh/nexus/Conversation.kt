@@ -48,7 +48,7 @@ class Conversation(private val context: Context, private val scope: CoroutineSco
 
     fun start() {
         if (state.value != State.Idle) return
-        if (!Engines.ttsReady() || !Engines.asrReady()) {
+        if (!(Engines.fastTtsReady() || Engines.ttsReady()) || !Engines.asrReady()) {
             error.value = "The voice models aren't on the phone yet. See Setup."
             return
         }
@@ -151,9 +151,22 @@ class Conversation(private val context: Context, private val scope: CoroutineSco
         }
     }
 
-    /** Speaks sentences as they arrive; the next one is generated while the current one is decoded. */
+    /**
+     * Speaks sentences as they arrive. Conversation uses the fast voice so replies start right away;
+     * without it, the realistic voice is pipelined (next sentence generated while this one decodes).
+     */
     private suspend fun speakAll(t: Turn, sentences: Channel<String>) = coroutineScope {
         val sp = speaker ?: return@coroutineScope
+        if (Engines.fastTtsReady()) {
+            for (s in sentences) {
+                if (t.cancelled) break
+                state.value = State.Speaking
+                t.spoken.append(s).append(' ')
+                sp.speakFast(s) { t.cancelled }
+            }
+            sp.drain { t.cancelled }
+            return@coroutineScope
+        }
         val tokens = Channel<LongArray>(2)
         launch(Dispatchers.Default) {
             for (s in sentences) {
