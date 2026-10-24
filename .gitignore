@@ -1,0 +1,27 @@
+.gradle/
+build/
+app/build/
+app/.cxx/
+local.properties
+.DS_Store
+.idea/
+*.iml
+.kotlin/
+
+# Secrets
+.env*
+
+# Large downloads (fetched by scripts/setup.sh)
+models/
+app/libs/*.aar
+.venv/
+
+# Personal voice data: recordings and the voice file made from them can be used to clone
+# Ramesh's voice, so they never go to GitHub. scripts/setup.sh regenerates the voice file locally.
+voices/
+reference.wav
+*.wav
+app/src/main/assets/voice/
+
+# Local Claude Code settings
+.claude/settings.local.json

@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:name=".NexusApp"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Nexus"
+        android:largeHeap="true"
+        android:theme="@style/Theme.Nexus">
+
+        <!-- Talk / Read / Setup. Also the "digital assistant" target (side key, Bixby "open Nexus"). -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VOICE_COMMAND" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- "Read with my voice" in the text-selection menu and the share sheet. -->
+        <activity
+            android:name=".ReadActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="Read with my voice"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Nexus.Invisible">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".ReadService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!-- System text-to-speech engine, so every app that reads aloud can use Ramesh's voice. -->
+        <service
+            android:name=".NexusTtsService"
+            android:exported="true"
+            android:label="Nexus (Ramesh's voice)">
+            <intent-filter>
+                <action android:name="android.intent.action.TTS_SERVICE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.speech.tts"
+                android:resource="@xml/tts_engine" />
+        </service>
+
+        <activity
+            android:name=".TtsDataActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Nexus.Invisible">
+            <intent-filter>
+                <action android:name="android.speech.tts.engine.CHECK_TTS_DATA" />
+                <action android:name="android.speech.tts.engine.GET_SAMPLE_TEXT" />
+                <action android:name="android.speech.tts.engine.INSTALL_TTS_DATA" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Wispr Flow-style dictation keyboard. -->
+        <service
+            android:name=".DictationIme"
+            android:exported="true"
+            android:label="Nexus Dictation"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+    </application>
+</manifest>
