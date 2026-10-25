@@ -18,7 +18,7 @@ class ReadActivity : Activity() {
             ?: intent.getCharSequenceExtra(Intent.EXTRA_TEXT))?.toString()
         when {
             text.isNullOrBlank() -> Unit
-            !Engines.ttsReady() -> Toast.makeText(this, "Open Nexus to finish setup first", Toast.LENGTH_LONG).show()
+            !Engines.ttsReady() && !Engines.fastTtsReady() -> Toast.makeText(this, "Open Nexus to finish setup first", Toast.LENGTH_LONG).show()
             else -> ReadService.read(this, text)
         }
         finish()

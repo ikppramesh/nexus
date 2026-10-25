@@ -26,6 +26,14 @@ class DebugReceiver : BroadcastReceiver() {
                     ReadService.read(context, a)
                 }
                 if (intent.hasExtra("benchtts")) benchTts(context, intent)
+                intent.getStringExtra("tok")?.let { text ->
+                    // Compare with the reference tokenizer and greedy output: --es tok "Hello there."
+                    val tts = ChatterboxTts(java.io.File(Engines.modelsDir, "chatterbox"), context.assets.open("voice/voice.cond"))
+                    Log.i(TAG, "text ids: ${tts.textTokens(text).joinToString(",")}")
+                    val t0 = System.currentTimeMillis()
+                    val speech = tts.speechTokens(text)
+                    Log.i(TAG, "speech ${speech.size} tokens in ${System.currentTimeMillis() - t0} ms: ${speech.take(30).joinToString(",")}")
+                }
                 intent.getStringExtra("fast")?.let { text ->
                     // The conversation voice: --es fast "Hello there"
                     val t0 = System.currentTimeMillis()

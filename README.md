@@ -7,7 +7,7 @@ Inspired by Block's [Dessa](https://block.xyz/dessa) (natural spoken conversatio
 | | What it does |
 |---|---|
 | **Talk** | Hands-free conversation. Interrupt it any time by talking over it. Replies start about a second after the AI answers, in your fast conversational voice. |
-| **Read with my voice** | Select text in any app, then ⋮ › *Read with my voice*, or share text to Nexus. Uses your realistic voice. |
+| **Read with my voice** | Select text in any app, then ⋮ › *Read with my voice*, or share text to Nexus. Choose *Realistic* (your Chatterbox voice, a few seconds to start) or *Fast* (starts in about a second) on the Read tab. |
 | **System voice** | Registers as an Android text-to-speech engine, so Samsung Read aloud, Select to Speak, TalkBack and browsers can all use your voice. |
 | **Dictation keyboard** | Wispr Flow-style: tap the mic, talk naturally, tap again. It transcribes on the phone, cleans up filler words and self-corrections, and types into any app. |
 | **Assistant** | Can be set as the digital-assistant app (side key), or opened with your phone's wake word ("Ramesh, open Nexus"). |

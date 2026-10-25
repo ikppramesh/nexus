@@ -12,7 +12,19 @@ object Sentences {
             if (s.isEmpty()) continue
             if (s.length <= MAX_CHARS) out += s else out += splitLong(s)
         }
-        return mergeShort(out)
+        return quickStart(mergeShort(out))
+    }
+
+    /**
+     * Cuts a long first piece at its first comma (or after a few words) so the first audio, which
+     * Ramesh waits for, is short and ready quickly; the rest generates while it plays.
+     */
+    private fun quickStart(parts: List<String>): List<String> {
+        val first = parts.firstOrNull() ?: return parts
+        if (first.length <= 60) return parts
+        val comma = first.indexOf(',').takeIf { it in 15..80 }
+        val cut = comma ?: first.indexOf(' ', 40).takeIf { it > 0 } ?: return parts
+        return listOf(first.substring(0, cut + 1).trim(), first.substring(cut + 1).trim()) + parts.drop(1)
     }
 
     private val listMarker = Regex("""(?m)^\s*(?:[-*•–—]+|\d+[.)]|#+)\s*""")

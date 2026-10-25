@@ -24,8 +24,8 @@ import java.nio.LongBuffer
 class ChatterboxTts(dir: File, voice: InputStream, private val tuning: Tuning = Tuning()) {
     /** Session settings, measured on the Fold7 (see DebugReceiver "benchtts"). */
     data class Tuning(
-        val lmThreads: Int = 2,
-        val decoderThreads: Int = 6,
+        val lmThreads: Int = 4,
+        val decoderThreads: Int = 4,
         val decoderFile: String = "conditional_decoder_q4.onnx",
         val decoderXnnpack: Boolean = false,
     )
@@ -61,6 +61,9 @@ class ChatterboxTts(dir: File, voice: InputStream, private val tuning: Tuning = 
         inputs.forEach { (k, v) -> if (k != "inputs_embeds") v.close() }
     }
 
+    /** Text token ids, exposed for debugging against the reference tokenizer. */
+    fun textTokens(text: String): LongArray = tokenizer.encode(text)
+
     /** Runs the language model: text → speech tokens. Stops early once [cancelled]. */
     fun speechTokens(text: String, cancelled: () -> Boolean = { false }): LongArray {
         val ids = tokenizer.encode(text)
@@ -88,6 +91,7 @@ class ChatterboxTts(dir: File, voice: InputStream, private val tuning: Tuning = 
 
                 val next = pickToken(res.get("logits").get() as OnnxTensor, generated)
                 generated += next
+
                 if (next == STOP) break
 
                 past = (0 until LAYERS).flatMap { i -> KV.map { kv -> i to kv } }.associate { (i, kv) ->
@@ -100,7 +104,7 @@ class ChatterboxTts(dir: File, voice: InputStream, private val tuning: Tuning = 
         } finally {
             previous?.close()
         }
-        val speech = generated.drop(1).filter { it != STOP }
+        val speech = capRuns(generated.drop(1).filter { it != STOP })
         return LongArray(speech.size) { speech[it] }
     }
 
@@ -123,7 +127,11 @@ class ChatterboxTts(dir: File, voice: InputStream, private val tuning: Tuning = 
         }
     }
 
-    /** Greedy choice with repetition penalty 1.2, as in Resemble's reference implementation. */
+    /**
+     * Greedy choice with repetition penalty 1.2, as in Resemble's reference implementation. The
+     * model sometimes holds one token (a pause) for seconds at a sentence break; once a run reaches
+     * [MAX_RUN] that token is ruled out so it moves on to the next word or stops.
+     */
     private fun pickToken(logits: OnnxTensor, generated: List<Long>): Long {
         val shape = logits.info.shape
         val vocab = shape[2].toInt()
@@ -135,9 +143,24 @@ class ChatterboxTts(dir: File, voice: InputStream, private val tuning: Tuning = 
             val i = t.toInt()
             last[i] = if (last[i] < 0) last[i] * 1.2f else last[i] / 1.2f
         }
+        val tail = generated.last()
+        if (generated.size >= MAX_RUN && generated.takeLast(MAX_RUN).all { it == tail }) {
+            last[tail.toInt()] = Float.NEGATIVE_INFINITY
+        }
         var best = 0
         for (i in 1 until vocab) if (last[i] > last[best]) best = i
         return best.toLong()
+    }
+
+    /** Shortens any run of one repeated token (a long pause) to [MAX_RUN]. */
+    private fun capRuns(tokens: List<Long>): List<Long> {
+        val out = ArrayList<Long>(tokens.size)
+        var run = 0
+        for ((i, t) in tokens.withIndex()) {
+            run = if (i > 0 && t == tokens[i - 1]) run + 1 else 1
+            if (run <= MAX_RUN) out += t
+        }
+        return out
     }
 
     private fun embedIds(ids: LongArray): OnnxTensor =
@@ -196,6 +219,8 @@ class ChatterboxTts(dir: File, voice: InputStream, private val tuning: Tuning = 
         private const val LAYERS = 24
         private const val HEADS = 16L
         private const val HEAD_DIM = 64L
+        /** 12 tokens ≈ 0.5 s: a natural pause. */
+        private const val MAX_RUN = 12
         private val KV = listOf("key", "value")
     }
 }

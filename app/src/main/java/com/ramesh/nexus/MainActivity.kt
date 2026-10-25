@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -273,6 +274,8 @@ private fun ReadScreen(prefs: Prefs) {
         mutableStateOf("Hi, this is Ramesh. Everything you select on this phone can now be read in my own voice.")
     }
     var speed by remember { mutableStateOf(prefs.speed) }
+    var voice by remember { mutableStateOf(prefs.readVoice) }
+    val reading by ReadService.state.collectAsState()
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Read in my voice", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
         Text(
@@ -283,14 +286,43 @@ private fun ReadScreen(prefs: Prefs) {
             value = text, onValueChange = { text = it },
             modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp),
         )
+        Text("Voice", color = Muted, modifier = Modifier.padding(top = 16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = voice == Prefs.VOICE_REALISTIC,
+                onClick = { voice = Prefs.VOICE_REALISTIC; prefs.readVoice = voice },
+                label = { Text("Realistic · slower start") },
+            )
+            FilterChip(
+                selected = voice == Prefs.VOICE_FAST,
+                onClick = { voice = Prefs.VOICE_FAST; prefs.readVoice = voice },
+                label = { Text("Fast · instant") },
+            )
+        }
+        Text(
+            if (voice == Prefs.VOICE_REALISTIC) "Sounds most like you. Takes a few seconds to start, with short pauses on long text."
+            else "Starts in about a second. Less like you.",
+            color = Muted, fontSize = 13.sp,
+        )
         Text("Speed ${"%.2f".format(speed)}×", color = Muted, modifier = Modifier.padding(top = 16.dp))
         Slider(
             value = speed, onValueChange = { speed = it }, valueRange = 0.7f..1.4f,
             onValueChangeFinished = { prefs.speed = speed },
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { ReadService.read(context, text) }, enabled = text.isNotBlank()) { Text("Speak") }
-            OutlinedButton(onClick = { ReadService.stop(context) }) { Text("Stop") }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(
+                onClick = { ReadService.read(context, text) },
+                enabled = text.isNotBlank() && reading == ReadService.State.Idle,
+            ) { Text("Speak") }
+            OutlinedButton(onClick = { ReadService.stop(context) }, enabled = reading != ReadService.State.Idle) { Text("Stop") }
+            when (reading) {
+                ReadService.State.Preparing -> {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text("Preparing your voice…", color = Muted, fontSize = 14.sp)
+                }
+                ReadService.State.Reading -> Text("Reading…", color = Good, fontSize = 14.sp)
+                ReadService.State.Idle -> Unit
+            }
         }
     }
 }

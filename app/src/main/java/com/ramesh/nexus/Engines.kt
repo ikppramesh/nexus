@@ -142,10 +142,9 @@ object Engines {
         }
     }
 
-    /** Loads whatever models are present so the first sentence isn't delayed. Call off the main thread. */
-    fun preload() {
-        if (fastTtsReady()) fastTts()
-        if (ttsReady()) tts()
+    /** Loads the conversation models (fast voice, speech recognition). Call off the main thread. */
+    fun preloadConversation() {
+        if (fastTtsReady()) fastTts() else if (ttsReady()) tts()
         if (asrReady()) recognizer()
     }
 
@@ -219,7 +218,16 @@ object Engines {
             extra = mapOf("temperature" to "0.7", "chunk_size" to "15"),
         )
         synchronized(fastLock) {
-            boosted { engine.generateWithConfigAndCallback(text, config) { if (onChunk(it)) 1 else 0 } }
+            boosted {
+                val t0 = System.currentTimeMillis()
+                var first = -1L
+                val audio = engine.generateWithConfigAndCallback(text, config) {
+                    if (first < 0) first = System.currentTimeMillis() - t0
+                    if (onChunk(it)) 1 else 0
+                }
+                Log.d(TAG, "Fast TTS %.1fs audio in %d ms (first audio %d ms)".format(
+                    audio.samples.size / audio.sampleRate.toFloat(), System.currentTimeMillis() - t0, first))
+            }
         }
     }
 

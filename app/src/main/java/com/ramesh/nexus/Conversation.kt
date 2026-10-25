@@ -56,7 +56,7 @@ class Conversation(private val context: Context, private val scope: CoroutineSco
         state.value = State.Loading
         bargeIn = prefs.bargeIn
         scope.launch {
-            withContext(Dispatchers.Default) { Engines.preload() }
+            withContext(Dispatchers.Default) { Engines.preloadConversation() }
             if (state.value != State.Loading) return@launch // stopped while loading
             if (bargeIn) enterCallMode()
             speaker = Speaker(

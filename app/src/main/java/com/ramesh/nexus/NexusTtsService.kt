@@ -41,7 +41,8 @@ class NexusTtsService : TextToSpeechService() {
     override fun onSynthesizeText(request: SynthesisRequest, callback: SynthesisCallback) {
         stopRequested = false
         val text = request.charSequenceText?.toString().orEmpty()
-        if (!Engines.ttsReady()) {
+        val fast = Prefs(this).readVoice == Prefs.VOICE_FAST && Engines.fastTtsReady() || !Engines.ttsReady()
+        if (!Engines.ttsReady() && !Engines.fastTtsReady()) {
             callback.error(TextToSpeech.ERROR_NOT_INSTALLED_YET)
             return
         }
@@ -51,16 +52,24 @@ class NexusTtsService : TextToSpeechService() {
             return
         }
         val maxBytes = callback.maxBufferSize
+        val onChunk = { chunk: FloatArray ->
+            val pcm = toPcm16(chunk)
+            var off = 0
+            while (off < pcm.size && !stopRequested) {
+                val n = minOf(maxBytes, pcm.size - off)
+                if (callback.audioAvailable(pcm, off, n) != TextToSpeech.SUCCESS) stopRequested = true
+                off += n
+            }
+            !stopRequested
+        }
         try {
-            Engines.synthesize(text) { chunk ->
-                val pcm = toPcm16(chunk)
-                var off = 0
-                while (off < pcm.size && !stopRequested) {
-                    val n = minOf(maxBytes, pcm.size - off)
-                    if (callback.audioAvailable(pcm, off, n) != TextToSpeech.SUCCESS) stopRequested = true
-                    off += n
+            if (fast) {
+                for (sentence in Sentences.split(text)) {
+                    if (stopRequested) break
+                    Engines.synthesizeFast(sentence, onChunk)
                 }
-                !stopRequested
+            } else {
+                Engines.synthesize(text, onChunk)
             }
             callback.done()
         } catch (e: Exception) {

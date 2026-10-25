@@ -33,6 +33,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("polish", true)
         set(v) = sp.edit { putBoolean("polish", v) }
 
+    /** Voice for reading aloud and the system TTS engine: [VOICE_REALISTIC] or [VOICE_FAST]. */
+    var readVoice: String
+        get() = sp.getString("read_voice", VOICE_REALISTIC)!!
+        set(v) = sp.edit { putString("read_voice", v) }
+
     /** Let Ramesh interrupt Nexus by talking over it. */
     var bargeIn: Boolean
         get() = sp.getBoolean("barge_in", true)
@@ -41,6 +46,8 @@ class Prefs(context: Context) {
     companion object {
         const val ENGINE_LOCAL = "irx"
         const val ENGINE_CLAUDE = "claude"
+        const val VOICE_REALISTIC = "realistic"
+        const val VOICE_FAST = "fast"
 
         val MODELS = listOf(
             "claude-haiku-5-5" to "Haiku 5.5 · fastest",
