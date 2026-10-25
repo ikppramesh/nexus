@@ -4,6 +4,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.media.PlaybackParams
+import android.util.Log
 import kotlin.math.min
 
 /** Plays Ramesh's voice, sentence by sentence, as it is generated. */
@@ -32,8 +33,14 @@ class Speaker(usage: Int = AudioAttributes.USAGE_MEDIA, speed: Float = 1f) {
     @Volatile private var framesWritten = 0L
 
     init {
-        // Time-stretch without changing pitch.
-        if (speed != 1f) track.playbackParams = PlaybackParams().setSpeed(speed).setPitch(1f)
+        // A streaming track waits until its whole buffer is full before it starts playing (20 s
+        // here, longer than a sentence), so without this Nexus never made a sound.
+        track.setStartThresholdInFrames(sampleRate / 10)
+        // Time-stretch without changing pitch; if the device refuses, play at normal speed.
+        if (speed != 1f) {
+            runCatching { track.playbackParams = PlaybackParams().setSpeed(speed).setPitch(1f) }
+                .onFailure { Log.w("NexusSpeaker", "speed $speed not supported", it) }
+        }
     }
 
     /** Generates and plays [text]; blocks until it has been queued. Stops early once [cancelled]. */
@@ -65,9 +72,21 @@ class Speaker(usage: Int = AudioAttributes.USAGE_MEDIA, speed: Float = 1f) {
         framesWritten += off
     }
 
-    /** Blocks until everything queued has been heard. */
+    /** Blocks until everything queued has been heard (gives up if playback stops moving). */
     fun drain(cancelled: () -> Boolean) {
-        while (!cancelled() && (track.playbackHeadPosition.toLong() and 0xffffffffL) < framesWritten) {
+        var last = -1L
+        var stalledSince = System.currentTimeMillis()
+        while (!cancelled()) {
+            val head = track.playbackHeadPosition.toLong() and 0xffffffffL
+            if (head >= framesWritten) return
+            val now = System.currentTimeMillis()
+            if (head != last) {
+                last = head
+                stalledSince = now
+            } else if (now - stalledSince > 3000) {
+                Log.w("NexusSpeaker", "playback stalled at $head of $framesWritten frames")
+                return
+            }
             Thread.sleep(20)
         }
     }
